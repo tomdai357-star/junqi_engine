@@ -6,6 +6,7 @@ import random
 from board import JunqiBoard
 from pieces import Piece
 from renderer import JunqiRenderer
+from referee import adjudicate_combat
 
 class JunqiEngine:
     def __init__(self):
@@ -173,29 +174,54 @@ class JunqiEngine:
                     self.log_message = f"{self.current_player}'s Turn. (Fog of War updated)"
                     return
                     
-                # If we already clicked a piece, check if we are clicking a destination
                 if self.selected_pos:
                     for (x, y), rect in self.viewer_zones.items():
                         if rect.collidepoint(pos):
                             if (x, y) in self.valid_spots:
-                                # MOVE THE PIECE!
                                 old_x, old_y = self.selected_pos
-                                piece = self.board.graph[(old_x, old_y)]["piece"]
+                                attacker = self.board.graph[(old_x, old_y)]["piece"]
+                                defender = self.board.graph[(x, y)]["piece"]
                                 
-                                # Teleport in the backend graph
-                                self.board.graph[(x, y)]["piece"] = piece
-                                self.board.graph[(old_x, old_y)]["piece"] = None
+                                # --- COMBAT FORK ---
+                                if defender is not None:
+                                    # Send it to the external Referee!
+                                    outcome, log_msg = adjudicate_combat(attacker, defender)
+                                    self.log_message = log_msg
+                                    
+                                    # Apply the Referee's ruling to the board graph
+                                    if outcome == "ATTACKER_WINS":
+                                        self.board.graph[(x, y)]["piece"] = attacker
+                                        self.board.graph[(old_x, old_y)]["piece"] = None
+                                    elif outcome == "DEFENDER_WINS":
+                                        self.board.graph[(old_x, old_y)]["piece"] = None # Attacker dies
+                                    elif outcome == "BOTH_DIE":
+                                        self.board.graph[(x, y)]["piece"] = None
+                                        self.board.graph[(old_x, old_y)]["piece"] = None
+                                    elif outcome == "GAME_OVER":
+                                        self.board.graph[(x, y)]["piece"] = attacker
+                                        self.board.graph[(old_x, old_y)]["piece"] = None
+                                        self.game_phase = "GAME_OVER" # Optional: Locks the game
+                                        
+                                else:
+                                    # Normal empty space movement
+                                    self.board.graph[(x, y)]["piece"] = attacker
+                                    self.board.graph[(old_x, old_y)]["piece"] = None
+                                    self.log_message = f"Moved piece to ({x}, {y})."
                                 
-                                self.log_message = f"Moved piece to ({x}, {y})."
+                                # Drop selection after taking an action
                                 self.selected_pos = None
                                 self.valid_spots = []
-                            # Or, switch selection to a different friendly piece
+                                if self.game_phase != "GAME_OVER":
+                                    self.current_player = "P2" if self.current_player == "P1" else "P1"
+                                    self.log_message += f" Turn passed to {self.current_player}."
+                                
+                            # Switch selection to a different friendly piece
                             elif self.board.graph[(x, y)]["piece"] and self.board.graph[(x, y)]["piece"].player == self.current_player:
                                 self.selected_pos = (x, y)
                                 self.valid_spots = self.board.get_legal_moves(x, y)
                                 self.log_message = f"Selected friendly piece at ({x}, {y})."
                             else:
-                                # Clicked invalid space, drop selection
+                                # Clicked invalid space
                                 self.selected_pos = None
                                 self.valid_spots = []
                                 self.log_message = "Deselected piece."
