@@ -137,6 +137,10 @@ class JunqiRenderer:
                 pygame.draw.rect(self.screen, WHITE, engine.btn_start_battle, 2, border_radius=6)
                 start_txt = self.font_large.render("START BATTLE", True, BLACK)
                 self.screen.blit(start_txt, start_txt.get_rect(center=engine.btn_start_battle.center))
+            pygame.draw.rect(self.screen, (130, 60, 180), engine.btn_randomize, border_radius=6)
+            pygame.draw.rect(self.screen, WHITE, engine.btn_randomize, 2, border_radius=6)
+            rand_txt = self.font_main.render("DEV: Auto-Fill Board", True, WHITE)
+            self.screen.blit(rand_txt, rand_txt.get_rect(center=engine.btn_randomize.center))
 
         elif engine.game_phase == "BATTLE":
             title_text = self.font_large.render("BATTLE PHASE", True, RED)

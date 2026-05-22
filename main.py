@@ -2,6 +2,7 @@
 import pygame
 import sys
 from settings import *
+import random
 from board import JunqiBoard
 from pieces import Piece
 from renderer import JunqiRenderer
@@ -34,6 +35,7 @@ class JunqiEngine:
         
         self.btn_switch_player = pygame.Rect(BOARD_WIDTH + 20, 20, PANEL_WIDTH - 40, 40)
         self.btn_start_battle = pygame.Rect(BOARD_WIDTH + 20, WINDOW_HEIGHT - 100, PANEL_WIDTH - 40, 40)
+        self.btn_randomize = pygame.Rect(BOARD_WIDTH + 20, WINDOW_HEIGHT - 150, PANEL_WIDTH - 40, 40)
 
     def _pre_initialize_full_terrain(self):
         for y in range(12):
@@ -113,6 +115,10 @@ class JunqiEngine:
 
     def handle_events(self, pos):
         if self.game_phase == "SETUP":
+            if self.btn_randomize.collidepoint(pos):
+                self.quick_random_deploy()
+                return
+            
             if self.btn_switch_player.collidepoint(pos):
                 self.current_player = "P2" if self.current_player == "P1" else "P1"
                 self.held_piece = None
@@ -176,7 +182,72 @@ class JunqiEngine:
                     else:
                         self.log_message = f"Clicked empty node at ({x}, {y})."
                     return
+                
+    def quick_random_deploy(self):
+        """Instantly fills both sides with a legally randomized setup for fast testing."""
+        from pieces import Piece
 
+        for player in ["P1", "P2"]:
+            # 1. Reset counts and define territory limits
+            self.counts[player] = {item[0]: item[2] for item in PIECES_DATA}
+            y_start, y_end = (0, 5) if player == "P1" else (6, 11)
+            frontline = 5 if player == "P1" else 6
+            back_rows = [0, 1] if player == "P1" else [10, 11]
+
+            # Clear any partially placed pieces
+            for y in range(y_start, y_end + 1):
+                for x in range(5):
+                    if self.board.graph[(x, y)]["piece"] and self.board.graph[(x, y)]["piece"].player == player:
+                        self.board.graph[(x, y)]["piece"] = None
+
+            # 2. Map available empty nodes (excluding Camps)
+            empty_nodes = []
+            hqs = []
+            for y in range(y_start, y_end + 1):
+                for x in range(5):
+                    node = self.board.graph[(x, y)]
+                    if node["type"] != "Camp":
+                        empty_nodes.append((x, y))
+                        if node["type"] == "HQ":
+                            hqs.append((x, y))
+
+            # 3. Place Flag (Must be in HQ)
+            flag_hq = random.choice(hqs)
+            self.board.graph[flag_hq]["piece"] = Piece(player, "军旗")
+            empty_nodes.remove(flag_hq)
+            self.counts[player]["军旗"] = 0
+
+            # 4. Place Mines (Must be in back two rows)
+            mine_spots = [pos for pos in empty_nodes if pos[1] in back_rows]
+            chosen_mines = random.sample(mine_spots, 3)
+            for spot in chosen_mines:
+                self.board.graph[spot]["piece"] = Piece(player, "地雷")
+                empty_nodes.remove(spot)
+            self.counts[player]["地雷"] = 0
+
+            # 5. Place Bombs (Cannot be on frontline)
+            bomb_spots = [pos for pos in empty_nodes if pos[1] != frontline]
+            chosen_bombs = random.sample(bomb_spots, 2)
+            for spot in chosen_bombs:
+                self.board.graph[spot]["piece"] = Piece(player, "炸弹")
+                empty_nodes.remove(spot)
+            self.counts[player]["炸弹"] = 0
+
+            # 6. Place the rest of the army
+            remaining_pieces = []
+            for name, count in self.counts[player].items():
+                remaining_pieces.extend([name] * count)
+
+            random.shuffle(remaining_pieces)
+            random.shuffle(empty_nodes)
+
+            for piece_name, spot in zip(remaining_pieces, empty_nodes):
+                self.board.graph[spot]["piece"] = Piece(player, piece_name)
+                self.counts[player][piece_name] = 0
+
+        self.held_piece = None
+        self.valid_spots = []
+        self.log_message = "DEV: Random deployment complete! Ready to start battle."
 if __name__ == "__main__":
     engine = JunqiEngine()
     engine.run()
