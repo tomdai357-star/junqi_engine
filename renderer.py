@@ -55,8 +55,11 @@ class JunqiRenderer:
                 pygame.draw.rect(self.screen, BLACK, t_rect)
                 pygame.draw.rect(self.screen, DARK_GRAY, t_rect, 2)
 
-            # Valid Spot Highlight (Only in SETUP)
-            if engine.game_phase == "SETUP" and engine.held_piece and (x, y) in engine.valid_spots:
+            # Valid Spot Highlight (For both SETUP and BATTLE)
+            is_setup_highlight = engine.game_phase == "SETUP" and engine.held_piece and (x, y) in engine.valid_spots
+            is_battle_highlight = engine.game_phase == "BATTLE" and getattr(engine, 'selected_pos', None) and (x, y) in engine.valid_spots
+            
+            if is_setup_highlight or is_battle_highlight:
                 s = pygame.Surface((40, 40), pygame.SRCALPHA)
                 pygame.draw.circle(s, (0, 255, 0, 150), (20, 20), 18)
                 self.screen.blit(s, (rect.centerx - 20, rect.centery - 20))

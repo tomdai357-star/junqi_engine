@@ -24,6 +24,7 @@ class JunqiEngine:
         self.game_phase = "SETUP" 
         self.current_player = "P1" 
         self.held_piece = None  
+        self.selected_pos = None
         self.log_message = "P1 Turn: Select a piece to deploy."
         self.valid_spots = []  
 
@@ -165,23 +166,54 @@ class JunqiEngine:
                 self.valid_spots = []
 
         elif self.game_phase == "BATTLE":
-            if self.btn_switch_player.collidepoint(pos):
-                self.current_player = "P2" if self.current_player == "P1" else "P1"
-                self.log_message = f"{self.current_player}'s Turn. (Fog of War updated)"
-                return
-                
-            for (x, y), rect in self.viewer_zones.items():
-                if rect.collidepoint(pos):
-                    node = self.board.graph[(x, y)]
-                    piece = node["piece"]
-                    
-                    if piece and piece.player == self.current_player:
-                        self.log_message = f"Selected friendly piece at ({x}, {y}). Awaiting Movement Phase."
-                    elif piece:
-                        self.log_message = f"Clicked enemy piece. Cannot move."
-                    else:
-                        self.log_message = f"Clicked empty node at ({x}, {y})."
+                if self.btn_switch_player.collidepoint(pos):
+                    self.current_player = "P2" if self.current_player == "P1" else "P1"
+                    self.selected_pos = None
+                    self.valid_spots = []
+                    self.log_message = f"{self.current_player}'s Turn. (Fog of War updated)"
                     return
+                    
+                # If we already clicked a piece, check if we are clicking a destination
+                if self.selected_pos:
+                    for (x, y), rect in self.viewer_zones.items():
+                        if rect.collidepoint(pos):
+                            if (x, y) in self.valid_spots:
+                                # MOVE THE PIECE!
+                                old_x, old_y = self.selected_pos
+                                piece = self.board.graph[(old_x, old_y)]["piece"]
+                                
+                                # Teleport in the backend graph
+                                self.board.graph[(x, y)]["piece"] = piece
+                                self.board.graph[(old_x, old_y)]["piece"] = None
+                                
+                                self.log_message = f"Moved piece to ({x}, {y})."
+                                self.selected_pos = None
+                                self.valid_spots = []
+                            # Or, switch selection to a different friendly piece
+                            elif self.board.graph[(x, y)]["piece"] and self.board.graph[(x, y)]["piece"].player == self.current_player:
+                                self.selected_pos = (x, y)
+                                self.valid_spots = self.board.get_legal_moves(x, y)
+                                self.log_message = f"Selected friendly piece at ({x}, {y})."
+                            else:
+                                # Clicked invalid space, drop selection
+                                self.selected_pos = None
+                                self.valid_spots = []
+                                self.log_message = "Deselected piece."
+                            return
+
+                # If no piece is selected yet, try to select one
+                else:
+                    for (x, y), rect in self.viewer_zones.items():
+                        if rect.collidepoint(pos):
+                            piece = self.board.graph[(x, y)]["piece"]
+                            if piece and piece.player == self.current_player:
+                                self.selected_pos = (x, y)
+                                # Ask the backend for the legal moves!
+                                self.valid_spots = self.board.get_legal_moves(x, y)
+                                self.log_message = f"Selected friendly piece at ({x}, {y})."
+                            elif piece:
+                                self.log_message = "Clicked enemy piece. Cannot move."
+                            return
                 
     def quick_random_deploy(self):
         """Instantly fills both sides with a legally randomized setup for fast testing."""

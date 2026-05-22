@@ -74,6 +74,42 @@ class JunqiBoard:
                 if (dx, dy) in self.graph:
                     self._add_edge((cx, cy), (dx, dy), "D.Road")
 
+    def get_legal_moves(self, x, y):
+        """
+        Calculates Stage 1 movement: 1-step adjacency for all pieces.
+        Enforces Immovable pieces, Friendly Fire, and Camp safe-zones.
+        """
+        node = self.graph.get((x, y))
+        if not node or not node["piece"]:
+            return []
+
+        piece = node["piece"]
+        
+        # 1. The Immovables: Mines and Flags cannot move.
+        if piece.name in ["地雷", "军旗"]:
+            return []
+            
+        legal_moves = []
+        
+        # 2. Standard 1-Step Movement (Check all connected neighbors)
+        for target_coords in node["neighbors"].keys():
+            target_node = self.graph[target_coords]
+            target_piece = target_node["piece"]
+            
+            # Rule A: You cannot attack your own team
+            if target_piece is not None and target_piece.player == piece.player:
+                continue
+                
+            # Rule B: Camps are Safe Zones. You cannot attack a piece inside a Camp.
+            # (If a piece is in a camp, no one can enter that node).
+            if target_node["type"] == "Camp" and target_piece is not None:
+                continue
+                
+            # If we pass the checks, it's a valid 1-step move!
+            legal_moves.append(target_coords)
+            
+        return legal_moves
+
     def print_text_board(self):
         """Prints an ASCII representation of the board state to the terminal."""
         print("\n=== JUNQI BOARD STATE ===")
@@ -96,6 +132,7 @@ class JunqiBoard:
             # Print the river gap between player territories
             if y == 5:
                 print("\n" + "="*40 + "  <-- RIVER / FRONTLINE\n")
+    
 
 if __name__ == "__main__":
     # 1. Instantiate the board (Builds the graph in memory)
