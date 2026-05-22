@@ -76,8 +76,8 @@ class JunqiBoard:
 
     def get_legal_moves(self, x, y):
         """
-        Calculates Stage 2 movement: 1-step adjacency + Straight-line Railroad sliding.
-        Enforces Immovable pieces, Friendly Fire, Camp safe-zones, and Line-of-Sight blocks.
+        Calculates Final Stage movement: 
+        1-step adjacency + Straight-line Railroad sliding + Engineer BFS Cornering.
         """
         node = self.graph.get((x, y))
         if not node or not node["piece"]:
@@ -90,6 +90,72 @@ class JunqiBoard:
             return []
             
         legal_moves = []
+        
+        def is_valid_target(nx, ny):
+            target_node = self.graph[(nx, ny)]
+            target_piece = target_node["piece"]
+            
+            if target_piece and target_piece.player == piece.player:
+                return False
+            if target_node["type"] == "Camp" and target_piece is not None:
+                return False
+            return True
+
+        # 2. Check all immediate neighbors (Standard 1-step)
+        for (nx, ny), path_type in node["neighbors"].items():
+            if is_valid_target(nx, ny):
+                legal_moves.append((nx, ny))
+            
+            # --- RAILROAD LOGIC ---
+            if path_type == "RR":
+                
+                # 3A. The Engineer (Breadth-First Search for cornering)
+                if piece.name == "工兵":
+                    queue = [(nx, ny)]
+                    visited = set([(x, y)]) # Mark the start node as visited
+                    
+                    while queue:
+                        cx, cy = queue.pop(0)
+                        
+                        if (cx, cy) in visited:
+                            continue
+                        visited.add((cx, cy))
+                        
+                        if is_valid_target(cx, cy):
+                            legal_moves.append((cx, cy))
+                            
+                        # If there is ANY piece here, the tracks are blocked. Stop flowing.
+                        if self.graph[(cx, cy)]["piece"] is not None:
+                            continue
+                            
+                        # If the node is empty, pour water into all connected RR paths!
+                        for (nnx, nny), n_path in self.graph[(cx, cy)]["neighbors"].items():
+                            if n_path == "RR" and (nnx, nny) not in visited:
+                                queue.append((nnx, nny))
+                                
+                # 3B. Standard Pieces (Raycast for straight lines)
+                elif self.graph[(nx, ny)]["piece"] is None:
+                    dx = nx - x
+                    dy = ny - y
+                    curr_x, curr_y = nx, ny
+                    
+                    while True:
+                        next_x = curr_x + dx
+                        next_y = curr_y + dy
+                        curr_node = self.graph[(curr_x, curr_y)]
+                        
+                        if (next_x, next_y) not in curr_node["neighbors"] or curr_node["neighbors"][(next_x, next_y)] != "RR":
+                            break
+                            
+                        if is_valid_target(next_x, next_y):
+                            legal_moves.append((next_x, next_y))
+                            
+                        if self.graph[(next_x, next_y)]["piece"] is not None:
+                            break
+                            
+                        curr_x, curr_y = next_x, next_y
+                        
+        return list(set(legal_moves))
         
         # Helper function to check if a specific node is a valid landing spot
         def is_valid_target(nx, ny):
