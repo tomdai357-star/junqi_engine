@@ -88,6 +88,7 @@ class JunqiRenderer:
                     p_text = self.font_small.render(display_str, True, WHITE)
                     p_rect = p_text.get_rect(center=rect.center)
                     self.screen.blit(p_text, p_rect)
+                    
 
     def draw_panel(self, engine):
         pygame.draw.rect(self.screen, DARK_GRAY, (BOARD_WIDTH, 0, PANEL_WIDTH, WINDOW_HEIGHT))
