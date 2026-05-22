@@ -193,5 +193,5 @@ class JunqiRenderer:
             color=WHITE, 
             max_width=PANEL_WIDTH - 40, 
             x=BOARD_WIDTH + 20, 
-            y=WINDOW_HEIGHT - 80 
+            y=WINDOW_HEIGHT - 50 
         )
