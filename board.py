@@ -76,8 +76,8 @@ class JunqiBoard:
 
     def get_legal_moves(self, x, y):
         """
-        Calculates Stage 1 movement: 1-step adjacency for all pieces.
-        Enforces Immovable pieces, Friendly Fire, and Camp safe-zones.
+        Calculates Stage 2 movement: 1-step adjacency + Straight-line Railroad sliding.
+        Enforces Immovable pieces, Friendly Fire, Camp safe-zones, and Line-of-Sight blocks.
         """
         node = self.graph.get((x, y))
         if not node or not node["piece"]:
@@ -85,30 +85,61 @@ class JunqiBoard:
 
         piece = node["piece"]
         
-        # 1. The Immovables: Mines and Flags cannot move.
+        # 1. The Immovables
         if piece.name in ["地雷", "军旗"]:
             return []
             
         legal_moves = []
         
-        # 2. Standard 1-Step Movement (Check all connected neighbors)
-        for target_coords in node["neighbors"].keys():
-            target_node = self.graph[target_coords]
+        # Helper function to check if a specific node is a valid landing spot
+        def is_valid_target(nx, ny):
+            target_node = self.graph[(nx, ny)]
             target_piece = target_node["piece"]
             
-            # Rule A: You cannot attack your own team
-            if target_piece is not None and target_piece.player == piece.player:
-                continue
-                
-            # Rule B: Camps are Safe Zones. You cannot attack a piece inside a Camp.
-            # (If a piece is in a camp, no one can enter that node).
+            if target_piece and target_piece.player == piece.player:
+                return False
             if target_node["type"] == "Camp" and target_piece is not None:
-                continue
-                
-            # If we pass the checks, it's a valid 1-step move!
-            legal_moves.append(target_coords)
+                return False
+            return True
+
+        # 2. Check all immediate neighbors (Standard 1-step)
+        for (nx, ny), path_type in node["neighbors"].items():
+            if is_valid_target(nx, ny):
+                legal_moves.append((nx, ny))
             
-        return legal_moves
+            # 3. The Raycast: If the path is a Railroad AND the adjacent node is completely empty, 
+            # we can attempt to slide through it!
+            if path_type == "RR" and self.graph[(nx, ny)]["piece"] is None:
+                
+                # Calculate the Direction Vector (e.g., dx = 1, dy = 0 means moving Right)
+                dx = nx - x
+                dy = ny - y
+                
+                curr_x, curr_y = nx, ny
+                
+                # Follow the tracks infinitely until broken
+                while True:
+                    next_x = curr_x + dx
+                    next_y = curr_y + dy
+                    curr_node = self.graph[(curr_x, curr_y)]
+                    
+                    # Rule A: Does the track physically continue in this exact straight line?
+                    if (next_x, next_y) not in curr_node["neighbors"] or curr_node["neighbors"][(next_x, next_y)] != "RR":
+                        break
+                        
+                    # Rule B: Can we legally land on this next node?
+                    if is_valid_target(next_x, next_y):
+                        legal_moves.append((next_x, next_y))
+                        
+                    # Rule C: Is there a physical blockage? (Any piece stops the slide)
+                    if self.graph[(next_x, next_y)]["piece"] is not None:
+                        break
+                        
+                    # Move the raycast forward to the next node
+                    curr_x, curr_y = next_x, next_y
+                    
+        # Return unique moves (using set to remove duplicates)
+        return list(set(legal_moves))
 
     def print_text_board(self):
         """Prints an ASCII representation of the board state to the terminal."""
